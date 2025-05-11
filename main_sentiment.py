@@ -28,6 +28,8 @@ def run_experiment(pretrain, embedding_dim, glove_file=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Hyperparams
+    ckp_path = 'cpt/model_checkpoint.pt'
+    load_cpt = False  # Set True if you want to resume from saved state
     Batch_size = 64
     n_layers = 2
     input_len = 250
@@ -64,6 +66,17 @@ def run_experiment(pretrain, embedding_dim, glove_file=None):
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
+    if load_cpt and os.path.exists(ckp_path):
+        checkpoint = torch.load(ckp_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch']
+        global_step = checkpoint['global_step']
+        print(f"Checkpoint loaded. Resuming from epoch {start_epoch}, step {global_step}")
+    else:
+        start_epoch = 0
+        global_step = 0
+
 
     # Data
     train_loader = DataLoader(MovieDataset('training_processed.csv'), batch_size=Batch_size, shuffle=True)
@@ -71,7 +84,7 @@ def run_experiment(pretrain, embedding_dim, glove_file=None):
 
     # Training
     model.train()
-    for epoch in range(num_epoches):
+    for epoch in range(start_epoch, num_epoches):
         epoch_loss = 0
         for x, y in train_loader:
             x, y = x.to(device), y.to(device)
@@ -83,6 +96,7 @@ def run_experiment(pretrain, embedding_dim, glove_file=None):
             optimizer.step()
             epoch_loss += loss.item()
         print(f"Epoch {epoch+1} loss: {epoch_loss / len(train_loader):.4f}")
+        _save_checkpoint(ckp_path, model, epoch + 1, global_step + 1, optimizer)
 
     # Testing
     print("Model testing on test data...")
